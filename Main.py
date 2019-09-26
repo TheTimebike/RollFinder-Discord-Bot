@@ -1,5 +1,4 @@
 import discord
-client = discord.Client()
 import json, urllib.parse, http.cookies
 http.cookies._is_legal_key = lambda _: True
 import requests as _requests
@@ -7,6 +6,7 @@ import manifest as _manifest
 from fractions import Fraction
 
 BASE_ROUTE = "https://www.bungie.net/Platform"
+client = discord.Client()
 
 class Requests:
     def __init__(self, api_token=None):
@@ -89,10 +89,15 @@ def refresh_database():
 
 @client.event
 async def on_ready():
-    storage.m = Manifest_Handler()
-    refresh_database()
+    while True:
+        try:
+            storage.m = Manifest_Handler()
+            refresh_database()
+            break
+        except KeyError as ex:
+            pass
 
-
+           
 @client.event
 async def on_message(message):
     if message.content.lower().startswith("!reload"):
