@@ -120,6 +120,28 @@ async def on_message(message):
     if message.content.lower().startswith("!reload"):
         refresh_database()
         await client.send_message(message.channel, "Database Refreshed!")
+    
+    if message.content.lower().startswith("!chance"):
+        arguments = message.content.lower()[8:].split("/")
+        chosen_weapon = arguments[0]
+        del arguments[0]
+        if storage.weapons.get(chosen_weapon, False) == False: return await client.send_message(message.channel, "Weapon not found. Perhaps you misspelt it or it is classified?")
+        weapon_roll_data = storage.m.get_weapon_perks(storage.weapons[chosen_weapon][0])
+        weapon_data = storage.m.manifest._decode_hash(storage.weapons[chosen_weapon][0], "DestinyInventoryItemDefinition", "en")
+        base_fraction = Fraction(1, 1)
+        for perk_choice in arguments:
+            index = arguments.index(perk_choice)
+            if perk_choice == "any":
+                base_fraction = base_fraction * Fraction(1, 1)
+            else:
+                if any(perk_choice.lower() == elim.lower() for elim in weapon_roll_data[index]):
+                    base_fraction = base_fraction * Fraction(1, len(weapon_roll_data[index]))
+        description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(chosen_weapon.title() + " on DestinyTracker", storage.weapons[chosen_weapon][0])
+        embed = discord.Embed(description=description)
+        embed.set_footer(text="Made By TheTimebike#2349")
+        embed.set_author(name=chosen_weapon.title(), icon_url="https://www.bungie.net" + weapon_data["displayProperties"]["icon"])
+        embed.add_field(name="Chances of Dropping", value="You have a {0} chance to get that exact roll!".format(base_fraction))
+        await client.send_message(message.channel, embed=embed)
 
     if message.content.lower().startswith("!stats"):
         chosen_weapon = message.content.lower()[7:]
@@ -179,4 +201,3 @@ async def on_message(message):
         if joined_str != "":
             embed.add_field(name="Mod Stats", value=joined_str)
         await client.send_message(message.channel, embed=embed) 
-   
