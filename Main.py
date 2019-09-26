@@ -41,14 +41,9 @@ class Manifest_Handler:
                 perk_data_list[-1].append(perk_data["displayProperties"]["name"])
         return perk_data_list
     
-    def get_perk(self, hash):
-        perk_data = self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en")
-        return perk_data
-    
     def get_mod_desc(self, hash):
-        mod_data = self.get_perk(hash)
-        for perk_hash in mod_data["perks"]:
-            mod_display_data = self.manifest._decode_hash(perk_hash["perkHash"], "DestinySandboxPerkDefinition", "en")["displayProperties"]["description"]
+        mod_data =  self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en")
+        mod_display_data = self.manifest._decode_hash(mod_data[0]["perkHash"], "DestinySandboxPerkDefinition", "en")["displayProperties"]["description"]
         return mod_display_data
 
 class Variables:
@@ -58,32 +53,37 @@ class Variables:
 storage = Variables()
 
 def refresh_database():
-    storage.weapons = {}
-    storage.perks = {}
-    storage.mods = {}
-    hash_category_conversion_table = {}
-    for x in storage.m.manifest._query_all("DestinyInventoryItemDefinition", "en"):
+    storage.weapons, storage.perks, storage.mods, hash_category_conversion_table = {}, {}, {}, {}
+    for manifest_entry in storage.m.manifest._query_all("DestinyInventoryItemDefinition", "en"):
         try:
-            x = json.loads(x[0])
-            for y in x["itemCategoryHashes"]:
-                if y not in hash_category_conversion_table.keys():
-                    hash_category_conversion_table[y] = storage.m.manifest._decode_hash(y, "DestinyItemCategoryDefinition", "en")["displayProperties"]["name"]
-            if 1 in x["itemCategoryHashes"] or 20 in x["itemCategoryHashes"]: ## weapons + armour
+            manifest_entry = json.loads(manifest_entry[0])
+            
+            ## Create conversion table between enum hashes and decoded values.
+            for entry_hash in manifest_entry["itemCategoryHashes"]:
+                if entry_hash not in hash_category_conversion_table.keys():
+                    hash_category_conversion_table[entry_hash] = storage.m.manifest._decode_hash(entry_hash, "DestinyItemCategoryDefinition", "en")["displayProperties"]["name"]
+            
+            ## Check if weapon hash (1) or armour hash (20) is in the hash array. TL:DR checking if item is weap or armour
+            if any(elim in [1, 20] for elim in manifest_entry["itemCategoryHashes"]):
                 hashes = []
-                for hash in x["itemCategoryHashes"]:
+                for hash in manifest_entry["itemCategoryHashes"]:
                     hashes.append(hash_category_conversion_table[hash])
-                storage.weapons[x["displayProperties"]["name"].lower()] =  [x["hash"], hashes]
-            if 610365472 in x["itemCategoryHashes"] and 1052191496 not in x["itemCategoryHashes"]: ## perks
+                storage.weapons[manifest_entry["displayProperties"]["name"].lower()] =  [manifest_entry["hash"], hashes]
+                
+            ## Check if perk hash (610365472) is in hash array, that weapon mod hash and armour mod hash (1052191496) are not.
+            if 610365472 in manifest_entry["itemCategoryHashes"] and not any(elim in [1052191496, 4062965806] for elim in manifest_entry["itemCategoryHashes"]):
                 stats = []
-                for stat_entry in x["investmentStats"]:
+                for stat_entry in manifest_entry["investmentStats"]:
                     stats.append( storage.m.manifest._decode_hash(stat_entry["statTypeHash"], "DestinyStatDefinition", "en")["displayProperties"]["name"] + ": " + str(stat_entry["value"]))
-                storage.perks[x["displayProperties"]["name"].lower()] = [x["hash"], stats]
-            if 1052191496 in x["itemCategoryHashes"] or 4062965806 in x["itemCategoryHashes"]: ## mods
-                slot_item = "a weapon." if 1052191496 in x["itemCategoryHashes"] and 4062965806 not in x["itemCategoryHashes"] else "a piece of armour."
+                storage.perks[manifest_entry["displayProperties"]["name"].lower()] = [manifest_entry["hash"], stats]
+                
+            ## Check if weapon mod hash (1052191496) or armour mod hash (4062965806)
+            if any(elim in [1052191496, 4062965806] for elim in manifest_entry["itemCategoryHashes"]):
                 stats = []
-                for stat_entry in x["investmentStats"]:
+                for stat_entry in manifest_entry["investmentStats"]:
                     stats.append( storage.m.manifest._decode_hash(stat_entry["statTypeHash"], "DestinyStatDefinition", "en")["displayProperties"]["name"] + ": " + str(stat_entry["value"]))
-                storage.mods[x["displayProperties"]["name"].lower()] = [x["hash"], stats, slot_item]
+                storage.mods[manifest_entry["displayProperties"]["name"].lower()] = [manifest_entry["hash"], stats]
+                
         except Exception as ex:
             pass
 
@@ -106,18 +106,16 @@ async def on_message(message):
         embed = discord.Embed(title="Rolls for " + message.content[6:].title())
         embed.set_footer(text="Made By TheTimebike#2349")
         for column in weapon_roll_data:
-            zz = "\n".join(column)
-            embed.add_field(name="Perk Column", value=zz)
+            column_data = "\n".join(column)
+            embed.add_field(name="Perk Column", value=column_data)
         await client.send_message(message.channel, embed=embed)
 
     if message.content.lower().startswith("!perk"):
         chosen_perk = message.content.lower()[6:]
         if storage.perks.get(chosen_perk, False) == False: return await client.send_message(message.channel, "Perk not found. Perhaps you misspelt it or it is classified?")
-        perk_roll_data = storage.m.get_perk(storage.perks[chosen_perk][0])
+        perk_roll_data = storage.m.self.manifest._decode_hash(storage.perks[chosen_perk][0], "DestinyInventoryItemDefinition", "en")
         embed = discord.Embed()
         embed.set_footer(text="Made By TheTimebike#2349")
-        if perk_roll_data["displayProperties"]["description"] == "":
-            print(perk_roll_data)
         embed.add_field(name="Perk Description", value=perk_roll_data["displayProperties"]["description"] if perk_roll_data["displayProperties"]["description"] != "" else "Error")
         embed.set_author(name=message.content[6:].title(), icon_url="https://www.bungie.net" + perk_roll_data["displayProperties"]["icon"])
         joined_str = "\n".join(storage.perks[chosen_perk][1])
@@ -128,8 +126,8 @@ async def on_message(message):
     if message.content.lower().startswith("!mod"):
         chosen_mod = message.content.lower()[5:]
         if storage.mods.get(chosen_mod, False) == False: return await client.send_message(message.channel, "Mod not found. Perhaps you misspelt it or it is classified?")
-        mod_roll_data = storage.m.get_perk(storage.mods[chosen_mod][0])
-        mod_description = storage.m.get_mod_desc(storage.mods[chosen_mod][0])
+        mod_roll_data = storage.m.self.manifest._decode_hash(storage.mods[chosen_mod][0])
+        mod_description = storage.m.get_mod_desc(storage.mods[chosen_mod][0],"DestinyInventoryItemDefinition", "en")
         embed = discord.Embed()
         embed.set_footer(text="Made By TheTimebike#2349")
         embed.add_field(name="Mod Description", value=mod_description)
