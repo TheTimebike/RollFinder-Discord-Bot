@@ -1,3 +1,19 @@
+## Figuring out which hash decodes into which type/category is literal hell, because you cant read the manifest itself.
+## To find out what a hash means, you need to write code to decode it with its specific definition, which is a pain in my
+## ass.
+
+## Manifest definition breakdown:
+## DestinyInventoryItemDefinition - definition for decoding items that slot into inventory buckets.
+## DestinySandboxPerkDefinition - definition for getting a mod's displayProperties, e.g. description, name.
+## DestinyStatDefinition - definition for getting the stat bonus a mod or perk gives.
+
+## Manifest hash breakdown:
+## 1 - weapon
+## 20 - armour
+## 610365472 - perk
+## 1052191496 - weapon mod
+## 4062965806 - armour mod
+
 import discord
 import json, urllib.parse, http.cookies
 http.cookies._is_legal_key = lambda _: True
@@ -24,12 +40,6 @@ class Manifest_Handler:
     def __init__(self):
         self.manifest = _manifest.Manifest("./", {})
     
-    def get_weapon_socket(self, hash):
-        weapon_data = self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en")
-        perk_data_list = []
-        for weapon_socket_data in weapon_data["sockets"]["socketCategories"]:
-            print(self.manifest._decode_hash(weapon_socket_data["socketCategoryHash"], "DestinySocketCategoryDefinition", "en"))
-
     def get_weapon_perks(self, hash):
         weapon_data, perk_data_list = self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en"), []
         if weapon_data.get("sockets", False) == False: return None
