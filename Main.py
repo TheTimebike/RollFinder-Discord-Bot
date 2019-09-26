@@ -53,7 +53,8 @@ class Manifest_Handler:
     
     def get_mod_desc(self, hash):
         mod_data =  self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en")
-        mod_display_data = self.manifest._decode_hash(mod_data[0]["perkHash"], "DestinySandboxPerkDefinition", "en")["displayProperties"]["description"]
+        for perk_hash in mod_data["perks"]:
+            mod_display_data = self.manifest._decode_hash(perk_hash["perkHash"], "DestinySandboxPerkDefinition", "en")["displayProperties"]["description"]
         return mod_display_data
 
 class Variables:
@@ -79,6 +80,12 @@ def refresh_database():
                 for hash in manifest_entry["itemCategoryHashes"]:
                     hashes.append(hash_category_conversion_table[hash])
                 storage.weapons[manifest_entry["displayProperties"]["name"].lower()] =  [manifest_entry["hash"], hashes]
+                stats = []
+                if 1 in manifest_entry["itemCategoryHashes"]:
+                    for stat_entry in manifest_entry["investmentStats"]:
+                        stat_data = storage.m.manifest._decode_hash(stat_entry["statTypeHash"], "DestinyStatDefinition", "en")["displayProperties"]["name"] + ": " + str(stat_entry["value"])
+                        stats.append(stat_data)
+                    storage.weapons[manifest_entry["displayProperties"]["name"].lower()].append(stats)
                 
             ## Check if perk hash (610365472) is in hash array, that weapon mod hash and armour mod hash (1052191496) are not.
             if 610365472 in manifest_entry["itemCategoryHashes"] and not any(elim in [1052191496, 4062965806] for elim in manifest_entry["itemCategoryHashes"]):
@@ -114,12 +121,31 @@ async def on_message(message):
         refresh_database()
         await client.send_message(message.channel, "Database Refreshed!")
 
+    if message.content.lower().startswith("!stats"):
+        chosen_weapon = message.content.lower()[7:]
+        if storage.weapons.get(chosen_weapon, False) == False: return await client.send_message(message.channel, "Weapon not found. Perhaps you misspelt it or it is classified?")
+        weapon_roll_data = storage.m.get_weapon_perks(storage.weapons[chosen_weapon][0])
+        weapon_data = storage.m.manifest._decode_hash(storage.weapons[chosen_weapon][0], "DestinyInventoryItemDefinition", "en")
+        description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(message.content[7:].title() + " on DestinyTracker", storage.weapons[chosen_weapon][0])
+        embed = discord.Embed(description=description)
+        embed.set_footer(text="Made By TheTimebike#2349")
+        embed.set_author(name=message.content[6:].title(), icon_url="https://www.bungie.net" + weapon_data["displayProperties"]["icon"])
+        for removed in ["Attack: 0", "Power: 0", ": 0"]:
+            storage.weapons[chosen_weapon][2].remove(removed)
+        joined_str = "\n".join(storage.weapons[chosen_weapon][2])
+        if joined_str != "":
+            embed.add_field(name="Perk Stats", value=joined_str)
+        await client.send_message(message.channel, embed=embed)
+
     if message.content.lower().startswith("!roll"):
         chosen_weapon = message.content.lower()[6:]
         if storage.weapons.get(chosen_weapon, False) == False: return await client.send_message(message.channel, "Weapon not found. Perhaps you misspelt it or it is classified?")
         weapon_roll_data = storage.m.get_weapon_perks(storage.weapons[chosen_weapon][0])
-        embed = discord.Embed(title="Rolls for " + message.content[6:].title())
+        weapon_data = storage.m.manifest._decode_hash(storage.weapons[chosen_weapon][0], "DestinyInventoryItemDefinition", "en")
+        description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(message.content[6:].title() + " on DestinyTracker", storage.weapons[chosen_weapon][0])
+        embed = discord.Embed(description=description)
         embed.set_footer(text="Made By TheTimebike#2349")
+        embed.set_author(name=message.content[6:].title(), icon_url="https://www.bungie.net" + weapon_data["displayProperties"]["icon"])
         for column in weapon_roll_data:
             column_data = "\n".join(column)
             embed.add_field(name="Perk Column", value=column_data)
@@ -128,8 +154,9 @@ async def on_message(message):
     if message.content.lower().startswith("!perk"):
         chosen_perk = message.content.lower()[6:]
         if storage.perks.get(chosen_perk, False) == False: return await client.send_message(message.channel, "Perk not found. Perhaps you misspelt it or it is classified?")
-        perk_roll_data = storage.m.self.manifest._decode_hash(storage.perks[chosen_perk][0], "DestinyInventoryItemDefinition", "en")
-        embed = discord.Embed()
+        perk_roll_data = storage.m.manifest._decode_hash(storage.perks[chosen_perk][0], "DestinyInventoryItemDefinition", "en")
+        description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(message.content[6:].title() + " on DestinyTracker", storage.perks[chosen_perk][0])
+        embed = discord.Embed(description=description)
         embed.set_footer(text="Made By TheTimebike#2349")
         embed.add_field(name="Perk Description", value=perk_roll_data["displayProperties"]["description"] if perk_roll_data["displayProperties"]["description"] != "" else "Error")
         embed.set_author(name=message.content[6:].title(), icon_url="https://www.bungie.net" + perk_roll_data["displayProperties"]["icon"])
@@ -141,9 +168,10 @@ async def on_message(message):
     if message.content.lower().startswith("!mod"):
         chosen_mod = message.content.lower()[5:]
         if storage.mods.get(chosen_mod, False) == False: return await client.send_message(message.channel, "Mod not found. Perhaps you misspelt it or it is classified?")
-        mod_roll_data = storage.m.self.manifest._decode_hash(storage.mods[chosen_mod][0])
-        mod_description = storage.m.get_mod_desc(storage.mods[chosen_mod][0],"DestinyInventoryItemDefinition", "en")
-        embed = discord.Embed()
+        mod_roll_data = storage.m.manifest._decode_hash(storage.mods[chosen_mod][0],"DestinyInventoryItemDefinition", "en")
+        mod_description = storage.m.get_mod_desc(storage.mods[chosen_mod][0])
+        description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(message.content[5:].title() + " on DestinyTracker", storage.mods[chosen_mod][0])
+        embed = discord.Embed(description=description)
         embed.set_footer(text="Made By TheTimebike#2349")
         embed.add_field(name="Mod Description", value=mod_description)
         embed.set_author(name=message.content[5:].title(), icon_url="https://www.bungie.net" + mod_roll_data["displayProperties"]["icon"])
@@ -151,4 +179,4 @@ async def on_message(message):
         if joined_str != "":
             embed.add_field(name="Mod Stats", value=joined_str)
         await client.send_message(message.channel, embed=embed) 
-    
+   
