@@ -136,6 +136,8 @@ async def on_message(message):
             else:
                 if any(perk_choice.lower() == elim.lower() for elim in weapon_roll_data[index]):
                     base_fraction = base_fraction * Fraction(1, len(weapon_roll_data[index]))
+                else:
+                    return await client.send_message(message.channel, "I was unable to locate the perk: {0}, perhaps it was misspelt?".format(perk_choice.title()))
         description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(chosen_weapon.title() + " on DestinyTracker", storage.weapons[chosen_weapon][0])
         embed = discord.Embed(description=description)
         embed.set_footer(text="Made By TheTimebike#2349")
