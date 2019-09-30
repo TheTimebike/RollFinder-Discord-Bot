@@ -137,7 +137,7 @@ async def on_message(message):
             for perk_choice in arguments:
                 index = arguments.index(perk_choice)
                 if perk_choice == "any":
-                    base_fraction = base_fraction * Fraction(count, 1)
+                    base_fraction = base_fraction * Fraction(1, 1)
                 else:
                     if any(perk_choice.lower() == elim.lower() for elim in weapon_roll_data[index]):
                         base_fraction = base_fraction * Fraction(count, len(weapon_roll_data[index]))
