@@ -41,13 +41,14 @@ class Manifest_Handler:
         self.manifest = _manifest.Manifest("./", {})
     
     def get_weapon_perks(self, hash):
-        masterworks = []
         weapon_data, perk_data_list = self.manifest._decode_hash(hash, "DestinyInventoryItemDefinition", "en"), []
-        if weapon_data.get("sockets", False) == False: return None
-        for weapon_socket_data in weapon_data["sockets"]["socketEntries"]:          
-            if weapon_socket_data["randomizedPlugItems"] == []: continue
+        #print(json.dumps(weapon_data, indent=4))
+        #if weapon_data.get("sockets", False) == False: return None
+        for weapon_socket_data in weapon_data["sockets"]["socketEntries"]:
+            if weapon_socket_data.get("randomizedPlugSetHash", False) == False: continue       
             perk_data_list.append([])
-            for random_socket_data in weapon_socket_data["randomizedPlugItems"]:
+            eee = self.manifest._decode_hash(weapon_socket_data["randomizedPlugSetHash"], "DestinyPlugSetDefinition", "en")
+            for random_socket_data in eee["reusablePlugItems"]:
                 perk_data = self.manifest._decode_hash(random_socket_data["plugItemHash"], "DestinyInventoryItemDefinition", "en")
                 perk_data_list[-1].append(perk_data["displayProperties"]["name"])
         return perk_data_list
@@ -103,7 +104,7 @@ async def refresh_database():
                     stats.append( storage.m.manifest._decode_hash(stat_entry["statTypeHash"], "DestinyStatDefinition", "en")["displayProperties"]["name"] + ": " + str(stat_entry["value"]))
                 storage.mods[manifest_entry["displayProperties"]["name"].lower()] = [manifest_entry["hash"], stats]
         except Exception as ex:
-            pass
+            print(ex)
     await client.change_presence(status=discord.Status.online)   
     
 
@@ -113,9 +114,11 @@ async def on_ready():
         try:
             storage.m = Manifest_Handler()
             await refresh_database()
+            with open("storage_weapons.txt", "w+") as out:
+                json.dump(storage.weapons, out, indent=4)
             break
-        except KeyError as ex:
-            pass
+        except Exception as ex:
+            print(ex)
 
            
 @client.event
@@ -143,6 +146,7 @@ async def on_message(message):
                         base_fraction = base_fraction * Fraction(count, len(weapon_roll_data[index]))
                     else:
                         return await client.send_message(message.channel, "I was unable to locate the perk: {0}, perhaps it was misspelt?".format(perk_choice.title()))
+                print("{0} -- {1}".format(count, perk_choice))
                 if count != 1:
                     count = count - 1
             description = "[{0}](https://db.destinytracker.com/d2/en/items/{1})".format(chosen_weapon.title() + " on DestinyTracker", storage.weapons[chosen_weapon][0])
@@ -210,6 +214,10 @@ async def on_message(message):
             if joined_str != "":
                 embed.add_field(name="Mod Stats", value=joined_str)
             await client.send_message(message.channel, embed=embed)
-    except:
-        pass 
-    
+        
+        if message.content.lower().startswith("!bitch"):
+            await client.send_message(message.channel, storage.mods.keys())
+        if message.content.lower().startswith("!bitc2"):
+            await client.send_message(message.channel, storage.perks.keys())
+    except Exception as ex:
+        print(ex)
